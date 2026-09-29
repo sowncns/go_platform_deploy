@@ -4,22 +4,58 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 
-	"github.com/sowncns/k3s-deploy-platform/internal/k3s"
+	"github.com/sowncns/k3s-deploy-platform/internal/cluster"
+	"github.com/sowncns/k3s-deploy-platform/internal/config"
+	"github.com/sowncns/k3s-deploy-platform/internal/database"
+	"github.com/sowncns/k3s-deploy-platform/internal/k8s"
 )
 
 func main() {
 	ctx := context.Background()
 
-	client, err := k3s.NewClient()
+	cfg := config.Load()
+	db, err := database.NewPostgresPool(ctx, cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	// Create cluster manager
+	clusterManager := cluster.NewManager(cluster.NewRepository(db))
+
+	// Register cluster (kubeconfig mac dinh ~/.kube/config)
+	kubeconfig := os.Getenv("KUBECONFIG")
+	if kubeconfig == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		kubeconfig = filepath.Join(home, ".kube", "config")
+	}
+
+	if err := clusterManager.Register(ctx, &cluster.Cluster{
+		ID:            "cluster-001",
+		Name:          "cluster-001",
+		Provider:      cluster.ClusterProviderK3s,
+		Status:        cluster.ClusterStatusActive,
+		CredentialRef: kubeconfig,
+	}); err != nil {
+		log.Fatal(err)
+	}
+
+	// Get cluster client
+	client, err := clusterManager.Get(ctx, "cluster-001")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-
+	// Test deployment
 	deployment, err := client.ApplyDeployment(
 		ctx,
-		k3s.DeploymentConfig{
+		k8s.DeploymentConfig{
 			Name:          "nginx",
 			Namespace:     "platform-dev",
 			Image:         "nginx:latest",
@@ -27,27 +63,10 @@ func main() {
 			ContainerPort: 80,
 		},
 	)
-
-	namespace , err := client.EnsureNamespace(ctx,"test-platform")
-
-	ingress, err := client.ApplyIngress(ctx,
-	k3s.IngressConfig{
-		Name :		"my-api",
-		Namespace:	"test-platform",
-		Host :		"api.example.com",
-		ServiceName:	"test",
-		ServicePort:	876,
-	},
-	)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println("deployment created:", deployment.Name)
-	fmt.Println("Namesapce Check:", namespace.Name)
-	fmt.Println("Ingress Check:", ingress.Name)
-
-
-	
-
+	fmt.Println("Deployment created:", deployment.Name)
+	fmt.Println("Namespace:", deployment.Namespace)
 }
