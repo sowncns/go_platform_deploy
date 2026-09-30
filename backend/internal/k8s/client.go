@@ -1,4 +1,4 @@
-package k3s
+package k8s
 
 import (
 	"fmt"
@@ -20,6 +20,20 @@ func NewClient() (*Client, error) {
 		return nil, fmt.Errorf("build kubernetes config: %w", err)
 	}
 
+	return newClientFromConfig(config)
+}
+
+
+func NewClientFromKubeconfigPath(path string) (*Client, error) {
+	config, err := clientcmd.BuildConfigFromFlags("", path)
+	if err != nil {
+		return nil, fmt.Errorf("build kubernetes config from %s: %w", path, err)
+	}
+
+	return newClientFromConfig(config)
+}
+
+func newClientFromConfig(config *rest.Config) (*Client, error) {
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
 		return nil, fmt.Errorf("create kubernetes client: %w", err)

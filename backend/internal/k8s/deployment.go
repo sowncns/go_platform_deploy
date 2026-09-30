@@ -1,4 +1,4 @@
-package k3s
+package k8s
 
 import (
 	"context"
@@ -18,8 +18,7 @@ type DeploymentConfig struct {
 	ContainerPort int32
 }
 
-func (c *Client) ApplyDeployment(ctx context.Context,cfg DeploymentConfig,
-) (*appsv1.Deployment, error) {
+func (c *Client) ApplyDeployment(ctx context.Context,cfg DeploymentConfig,) (*appsv1.Deployment, error) {
 	deployments := c.Kube.AppsV1().
 		Deployments(cfg.Namespace)
 

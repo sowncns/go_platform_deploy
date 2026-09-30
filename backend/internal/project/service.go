@@ -25,21 +25,17 @@ type ProjectService interface {
 	PatchEnvVars(ctx context.Context ,projectID uint , userID uint, newVars map[string]string) error
 }
 
-// type K3sClient interface {
-// 	ApplySecret(ctx context.Context, namespace, secretName string, data map[string]string) error
-// 	RestartDeployment(ctx context.Context, namespace, deploymentName string) error
-// }
 
 type Service struct {
 	repo ProjectRepository
-	// k3s K3sClient
+	
 }
 
 
 func NewService(repo ProjectRepository) *Service {
 	return &Service{
 		repo: repo, 
-		// k3s:k3s,
+		
 	}
 }
 
