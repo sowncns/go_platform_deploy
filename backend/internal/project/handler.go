@@ -2,6 +2,7 @@ package project
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 
@@ -12,6 +13,18 @@ import (
 
 type Handler struct {
 	service ProjectService
+}
+
+
+func (h *Handler) RegisterRoutes(r *gin.RouterGroup) {
+	projectGroup := r.Group("/projects")
+	
+	{
+		projectGroup.POST("", h.CreateProject)
+		projectGroup.GET("/", h.ListProjectsByUserID)
+		projectGroup.GET("/:id", h.FindProjectByID)
+		projectGroup.PATCH("/:id", h.UpdateProject)
+	}
 }
 
 func NewHandler(service ProjectService) *Handler {
@@ -98,8 +111,8 @@ func (h *Handler) FindProjectByID(c *gin.Context) {
 }
 
 func (h *Handler) ListProjectsByUserID(c *gin.Context) {
-	userID := c.GetUint("user_id")
-
+	userID  := c.GetUint("user_id")
+	log.Printf(" user id %d", userID)
 	projects, err := h.service.ListProjects(c.Request.Context(), userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

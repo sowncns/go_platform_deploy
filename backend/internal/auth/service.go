@@ -2,88 +2,43 @@ package auth
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/sowncns/k3s-deploy-platform/internal/auth/dto"
-	githubclient "github.com/sowncns/k3s-deploy-platform/internal/github"
 )
 
-type AuthService interface{
-	LoginWithGitHub(
-	ctx context.Context,
-	code string,
-) (*GitHubUser, error)
-GetGitHubLoginURL() string 
+type AuthService interface {
+	CreateOrUpdateUser(
+		ctx context.Context,
+		input dto.CreateAuthUser,
+	) (*GitHubUser, error)
 }
 
 type Service struct {
-	GitHubOAuth *githubclient.OAuthConfig
-	repo  AuthRepository
+	repo AuthRepository
 }
 
-func NewService(
-	githubOAuth *githubclient.OAuthConfig,
-	repo AuthRepository,
-) *Service {
+func NewService(repo AuthRepository) *Service {
 	return &Service{
-		GitHubOAuth: githubOAuth,
-		repo : repo,
+		repo: repo,
 	}
 }
 
-
-func (s *Service) LoginWithGitHub(
+func (s *Service) CreateOrUpdateUser(
 	ctx context.Context,
-	code string,
+	input dto.CreateAuthUser,
 ) (*GitHubUser, error) {
+	user := &GitHubUser{
+		ID:          input.ID,
+		Login:       input.Login,
+		Name:        input.Name,
+		Email:       input.Email,
+		AvatarURL:   input.AvatarURL,
+		AccessToken: input.AccessToken,
+	}
 
-	oauthConfig := githubclient.NewOAuthConfig()
-
-	token, err := githubclient.ExchangeCode(
-		ctx,
-		oauthConfig,
-		code,
-	)
-	if err != nil {
+	if err := s.repo.Upsert(ctx, user); err != nil {
 		return nil, err
 	}
 
-	client := githubclient.NewClient(token.AccessToken)
-
-	ghUser, err := client.GetUser(ctx)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"get github user: %w",
-			err,
-		)
-	}
-
-	user, err := s.repo.getUserGithub(ctx, ghUser.GetID())
-
-	if err != nil {
-		user, err = s.repo.Create(ctx,
-			&dto.CreateAuthUser{
-				ID:        ghUser.GetID(),
-				Login:     ghUser.GetLogin(),
-				Name:      ghUser.GetName(),
-				Email:     ghUser.GetEmail(),
-				AvatarURL: ghUser.GetAvatarURL(),
-			},
-		)
-
-		if err != nil {
-			return nil, fmt.Errorf(
-				"create github user: %w",
-				err,
-			)
-		}
-	}
-
 	return user, nil
-}
-
-func (s *Service) GetGitHubLoginURL() string {
-	config := githubclient.NewOAuthConfig()
-
-	return config.AuthCodeURL("github-login")
 }

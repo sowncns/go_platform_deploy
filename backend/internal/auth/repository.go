@@ -3,80 +3,135 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/sowncns/k3s-deploy-platform/internal/auth/dto"
 )
 
-var ErrNotFound = errors.New("user not found")
-
 type AuthRepository interface {
-	Create(ctx context.Context, req *dto.CreateAuthUser) (*GitHubUser, error)
-	getUserGithub(ctx context.Context, userID int64) (*GitHubUser, error)
+	FindByID(ctx context.Context, id int64) (*GitHubUser, error)
+	Upsert(ctx context.Context, user *GitHubUser) error
+	FindByAccessToken(ctx context.Context, accessToken string) (*GitHubUser, error)
 }
 
-type Repository struct {
+type repository struct {
 	db *pgxpool.Pool
 }
 
-func NewRepository(db *pgxpool.Pool) *Repository {
-	return &Repository{db: db}
+func NewRepository(db *pgxpool.Pool) AuthRepository {
+	return &repository{
+		db: db,
+	}
 }
 
-func (r *Repository) getUserGithub(ctx context.Context, userID int64) (*GitHubUser, error) {
-	u := &GitHubUser{}
-	query := `
-		SELECT id
-		FROM githubuser
-		WHERE id = $1
-	`
-	err := r.db.QueryRow(ctx, query, userID).Scan(
-		&u.ID,
-	)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrNotFound
-		}
-		return nil, err
-	}
-	return u, nil
-}
+func (r *repository) FindByID(
+	ctx context.Context,
+	id int64,
+) (*GitHubUser, error) {
+	user := &GitHubUser{}
 
-func (r *Repository) Create(ctx context.Context, req *dto.CreateAuthUser) (*GitHubUser, error) {
-	_, err := r.getUserGithub(ctx, req.ID)
-	if err != nil {
-		return nil, err
-	}
-	query := `
-		INSERT INTO githubuser (
+	err := r.db.QueryRow(
+		ctx,
+		`
+		SELECT
 			id,
 			login,
+			name,
 			email,
-			avatar,
-			name
-		)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
-	`
-	var user GitHubUser
-	err = r.db.QueryRow(
-		ctx,
-		query,
-		req.ID,
-		req.Login,
-		req.Email,
-		req.AvatarURL,
-		req.Name,
+			avatar_url,
+			access_token,
+			created_at,
+			updated_at
+		FROM github_users
+		WHERE id = $1
+		`,
+		id,
 	).Scan(
-		&req.ID,
-		&req.Login,
-		&req.Email,
-		&req.AvatarURL,
-		&req.Name,
+		&user.ID,
+		&user.Login,
+		&user.Name,
+		&user.Email,
+		&user.AvatarURL,
+		&user.AccessToken,
+		&user.CreatedAt,
+		&user.UpdatedAt,
 	)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("find github user by id: %w", err)
+	}
+
+	return user, nil
+}
+
+// Upsert creates the user if it doesn't exist (by GitHub id), or updates
+// its profile fields and access token if it does.
+func (r *repository) Upsert(
+	ctx context.Context,
+	user *GitHubUser,
+) error {
+	err := r.db.QueryRow(
+		ctx,
+		`
+		INSERT INTO github_users (
+			id,
+			login,
+			name,
+			email,
+			avatar_url,
+			access_token
+		)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (id) DO UPDATE SET
+			login = EXCLUDED.login,
+			name = EXCLUDED.name,
+			email = EXCLUDED.email,
+			avatar_url = EXCLUDED.avatar_url,
+			access_token = EXCLUDED.access_token,
+			updated_at = NOW()
+		RETURNING created_at, updated_at
+		`,
+		user.ID,
+		user.Login,
+		user.Name,
+		user.Email,
+		user.AvatarURL,
+		user.AccessToken,
+	).Scan(
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+
+	if err != nil {
+		return fmt.Errorf("upsert github user: %w", err)
+	}
+
+	return nil
+}
+
+
+func (r *repository) FindByAccessToken(ctx context.Context, accessToken string) (*GitHubUser, error) {
+    var user GitHubUser
+   query := `SELECT id, login, name, email, avatar_url, access_token FROM github_users WHERE access_token = $1`
+   err := r.db.QueryRow(ctx, query, accessToken).Scan(
+		&user.ID,
+		&user.Login,
+		&user.Name,
+		&user.Email,
+		&user.AvatarURL,
+		&user.AccessToken,
+	)
+
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, nil // Không tìm thấy user
+		}
+		return nil, err // Lỗi database khác
 	}
 
 	return &user, nil

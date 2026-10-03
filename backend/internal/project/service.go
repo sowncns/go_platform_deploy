@@ -2,10 +2,12 @@ package project
 
 import (
 	"context"
-	"github.com/sowncns/k3s-deploy-platform/internal/project/dto"
-	"strings"
 	"errors"
 	"fmt"
+	"log"
+	"strings"
+
+	"github.com/sowncns/k3s-deploy-platform/internal/project/dto"
 )
 
 var (
@@ -77,6 +79,12 @@ func (s *Service)PatchEnvVars(ctx context.Context ,projectID uint, userID uint, 
 }
 
 func (s *Service) ListProjects(ctx context.Context, userID uint) ([]*Project, error) {
+	
+	if userID == 0 {
+		log.Print("[ERROR] user_id không hợp lệ")
+		return nil, fmt.Errorf("userID cannot be zero")
+	}
+
 	return s.repo.ListProjectsByUserID(ctx, userID)
 }
 

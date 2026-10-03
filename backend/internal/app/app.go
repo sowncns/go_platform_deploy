@@ -8,6 +8,7 @@ import (
 	"github.com/sowncns/k3s-deploy-platform/internal/deployment"
 	"github.com/sowncns/k3s-deploy-platform/internal/github"
 	"github.com/sowncns/k3s-deploy-platform/internal/router"
+	"github.com/sowncns/k3s-deploy-platform/internal/project"
 )
 
 // BuildHandlers khởi tạo toàn bộ Repo -> Service -> Handler của hệ thống
@@ -19,19 +20,19 @@ func BuildHandlers(pool *pgxpool.Pool, clusterManager *cluster.Manager, cfg *con
 
 
 	
-
-	githubOAuth := &github.OAuthConfig{
-		ClientID:     cfg.GitHubClientID,
-		ClientSecret: cfg.GitHubClientSecret,
-		RedirectURL:  cfg.GitHubRedirectURL,
-	}
 	authRepo := auth.NewRepository(pool)
-	authService := auth.NewService(githubOAuth,authRepo)
-	authHandler := auth.NewHandler(authService)
+	authService := auth.NewService(authRepo)
+	githubHandler := github.NewHandler(authService, authRepo)
 
+
+
+	projectRepo := project.NewRepository(pool)
+	projectService := project.NewService(projectRepo)
+	projectHandler := project.NewHandler(projectService)
 	return router.Handlers{
 		Deployment: depHandler,
-		Auth : authHandler,
-		
+		GitHub:     githubHandler,
+		Project:    projectHandler,
+		AuthRepo:   authRepo,
 	}
 }

@@ -12,6 +12,14 @@ type Handler struct {
 	service DeploymentService
 }
 
+func (h *Handler) RegisterRoutes(rg *gin.RouterGroup) {
+	deployments := rg.Group("/clusters")
+	{
+		deployments.POST("/:clusterId/deployments", h.CreateDeployment)
+	}
+}
+
+
 func NewHandler(service DeploymentService) *Handler {
 	return &Handler{service: service}
 }
